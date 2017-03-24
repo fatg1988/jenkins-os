@@ -18,6 +18,14 @@ properties([
                defaultValue: 'release.xml'),
         choice(name: 'COREOS_OFFICIAL',
                choices: "0\n1"),
+        string(name: 'DOWNLOAD_CREDS',
+               defaultValue: 'jenkins-coreos-systems-write-5df31bf86df3.json',
+               description: '''Credentials ID for a JSON file passed as the \
+GOOGLE_APPLICATION_CREDENTIALS value for uploading image files from the \
+Google Storage URL, requires read permission'''),
+        string(name: 'DOWNLOAD_ROOT',
+               defaultValue: 'gs://builds.developer.core-os.net',
+               description: 'URL prefix where image files are downloaded'),
         string(name: 'PIPELINE_BRANCH',
                defaultValue: 'master',
                description: 'Branch to use for fetching the pipeline jobs')
@@ -32,19 +40,19 @@ node('amd64 && kvm') {
         step([$class: 'CopyArtifact',
               fingerprintArtifacts: true,
               projectName: '/mantle/master-builder',
-              selector: [$class: 'StatusBuildSelector',
-                         stable: false]])
+              selector: [$class: 'StatusBuildSelector', stable: false]])
 
         withCredentials([
             [$class: 'FileBinding',
-             credentialsId: 'jenkins-coreos-systems-write-5df31bf86df3.json',
+             credentialsId: params.DOWNLOAD_CREDS,
              variable: 'GOOGLE_APPLICATION_CREDENTIALS']
         ]) {
             withEnv(["BOARD=${params.BOARD}",
                      "COREOS_OFFICIAL=${params.COREOS_OFFICIAL}",
                      "MANIFEST_NAME=${params.MANIFEST_NAME}",
                      "MANIFEST_REF=${params.MANIFEST_REF}",
-                     "MANIFEST_URL=${params.MANIFEST_URL}"]) {
+                     "MANIFEST_URL=${params.MANIFEST_URL}",
+                     "DOWNLOAD_ROOT=${params.DOWNLOAD_ROOT}"]) {
                 rc = sh returnStatus: true, script: '''#!/bin/bash -ex
 
 # clean up old test results
@@ -68,14 +76,8 @@ script() {
                   --manifest-name "${MANIFEST_NAME}"
 source .repo/manifests/version.txt
 
-if [[ "${COREOS_OFFICIAL}" -eq 1 ]]; then
-  root="gs://builds.release.core-os.net/${GROUP}"
-else
-  root="gs://builds.developer.core-os.net"
-fi
-
 mkdir -p tmp
-./bin/cork download-image --root="${root}/boards/${BOARD}/${COREOS_VERSION}" \
+./bin/cork download-image --root="${DOWNLOAD_ROOT}/boards/${BOARD}/${COREOS_VERSION}" \
                           --json-key="${GOOGLE_APPLICATION_CREDENTIALS}" \
                           --cache-dir=./tmp \
                           --platform=qemu
@@ -101,9 +103,9 @@ enter sudo timeout --signal=SIGQUIT 60m kola run --board="${BOARD}" \
                      --qemu-image="/mnt/host/source/tmp/coreos_production_image.bin" \
                      --tapfile="/mnt/host/source/tmp/${JOB_NAME##*/}.tap"
 
-if [[ "${COREOS_BUILD_ID#jenkins2-}" == master-* ]]; then
-  enter gsutil cp "${root}/boards/${BOARD}/${COREOS_VERSION}/version.txt" \
-                  "${root}/boards/${BOARD}/current-master/version.txt"
+if [[ "${COREOS_BUILD_ID}" == *-master-* ]]; then
+  enter gsutil cp "${DOWNLOAD_ROOT}/boards/${BOARD}/${COREOS_VERSION}/version.txt" \
+                  "${DOWNLOAD_ROOT}/boards/${BOARD}/current-master/version.txt"
 fi
 '''  /* Editor quote safety: ' */
             }
