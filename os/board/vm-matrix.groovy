@@ -220,6 +220,7 @@ stage('Downstream') {
             string(name: 'MANIFEST_NAME', value: params.MANIFEST_NAME),
             string(name: 'MANIFEST_REF', value: params.MANIFEST_REF),
             string(name: 'MANIFEST_URL', value: params.MANIFEST_URL),
+            string(name: 'DOWNLOAD_ROOT', value: params.GS_RELEASE_ROOT),
             string(name: 'PIPELINE_BRANCH', value: params.PIPELINE_BRANCH)
         ]
 }

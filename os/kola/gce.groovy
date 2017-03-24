@@ -15,6 +15,9 @@ properties([
                defaultValue: 'release.xml'),
         choice(name: 'COREOS_OFFICIAL',
                choices: "0\n1"),
+        string(name: 'DOWNLOAD_ROOT',
+               defaultValue: 'gs://builds.developer.core-os.net',
+               description: 'URL prefix where image files are downloaded'),
         string(name: 'PIPELINE_BRANCH',
                defaultValue: 'master',
                description: 'Branch to use for fetching the pipeline jobs')
@@ -29,13 +32,13 @@ node('gce') {  /* This needs "Read Write" on "Compute Engine" access scope.  */
         step([$class: 'CopyArtifact',
               fingerprintArtifacts: true,
               projectName: '/mantle/master-builder',
-              selector: [$class: 'StatusBuildSelector',
-                         stable: false]])
+              selector: [$class: 'StatusBuildSelector', stable: false]])
 
         withEnv(["COREOS_OFFICIAL=${params.COREOS_OFFICIAL}",
                  "MANIFEST_NAME=${params.MANIFEST_NAME}",
                  "MANIFEST_REF=${params.MANIFEST_REF}",
-                 "MANIFEST_URL=${params.MANIFEST_URL}"]) {
+                 "MANIFEST_URL=${params.MANIFEST_URL}",
+                 "DOWNLOAD_ROOT=${params.DOWNLOAD_ROOT}"]) {
             rc = sh returnStatus: true, script: '''#!/bin/bash -ex
 
 BOARD=amd64-usr
@@ -46,18 +49,12 @@ short_ref="${MANIFEST_REF#refs/tags/}"
 git clone --depth 1 --branch "${short_ref}" "${MANIFEST_URL}" manifests
 source manifests/version.txt
 
-if [[ "${COREOS_OFFICIAL}" -eq 1 ]]; then
-  root="gs://builds.release.core-os.net/${GROUP}"
-else
-  root="gs://builds.developer.core-os.net"
-fi
-
 NAME="jenkins-${JOB_NAME##*/}-${BUILD_NUMBER}"
 
 ./bin/ore create-image \
     --board="${BOARD}" \
     --version="${COREOS_VERSION}" \
-    --source-root="${root}/boards" \
+    --source-root="${DOWNLOAD_ROOT}/boards" \
     --service-auth=true \
     --family="${NAME}"
 
